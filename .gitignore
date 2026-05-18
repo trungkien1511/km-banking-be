@@ -1,33 +1,76 @@
-HELP.md
+# =========================================================================
+# KM BANK - Spring Boot Backend .gitignore
+# =========================================================================
+
+# --- Compiled class files ---
+*.class
+
+# --- Log files ---
+*.log
+logs/
+
+# --- Blueprints and Guides ---
+login_flow_guide.md
+
+# --- Package Files ---
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# --- Maven Build Directory ---
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.restore
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+# Avoid ignoring Maven Wrapper itself
+!.mvn/wrapper/maven-wrapper.jar
+!mvnw
+!mvnw.cmd
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# --- IntelliJ IDEA ---
+.idea/
 *.iml
+*.iws
 *.ipr
+out/
 
-### NetBeans ###
+# --- Eclipse ---
+.settings/
+.classpath
+.project
+.factorypath
+
+# --- NetBeans ---
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
+# --- VS Code ---
 .vscode/
+
+# --- OS/System Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Secrets and Environment Configurations ---
+.env
+.env.local
+.env.*
+application-local.properties
+application-dev.properties.local
+*.pem
+*.key
+*.p12
+*.jks
