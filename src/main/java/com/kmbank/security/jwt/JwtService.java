@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
+import org.springframework.stereotype.Service;
+
+@Service
 @RequiredArgsConstructor
 public class JwtService {
 
