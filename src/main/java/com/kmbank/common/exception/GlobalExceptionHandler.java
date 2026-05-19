@@ -17,59 +17,61 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(ex.getErrorCode().name(), ex.getMessage()));
-    }
+        @ExceptionHandler(BusinessException.class)
+        public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ApiResponse.error(ex.getErrorCode().name(), ex.getMessage()));
+        }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
-        List<ApiResponse.FieldError> validationErrors = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .map(err -> new ApiResponse.FieldError(err.getField(), err.getDefaultMessage()))
-                .collect(Collectors.toList());
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
+                List<ApiResponse.FieldError> validationErrors = ex.getBindingResult()
+                                .getFieldErrors()
+                                .stream()
+                                .map(err -> new ApiResponse.FieldError(err.getField(), err.getDefaultMessage()))
+                                .collect(Collectors.toList());
 
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ApiResponse.validationError(validationErrors));
-    }
+                return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                                .body(ApiResponse.validationError(validationErrors));
+        }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.INVALID_CREDENTIALS.name(), "Invalid username or password"));
-    }
+        @ExceptionHandler(BadCredentialsException.class)
+        public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.INVALID_CREDENTIALS.name(),
+                                                "Invalid username or password"));
+        }
 
-    @ExceptionHandler(org.springframework.security.authentication.LockedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleLockedException(LockedException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.USER_LOCKED.name(), "User account is locked"));
-    }
+        @ExceptionHandler(LockedException.class)
+        public ResponseEntity<ApiResponse<Void>> handleLockedException(LockedException ex) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.USER_LOCKED.name(), "User account is locked"));
+        }
 
-    public ResponseEntity<ApiResponse<Void>> handleDisabledException(DisabledException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.USER_DISABLED.name(), "User account is disabled"));
-    }
+        @ExceptionHandler(DisabledException.class)
+        public ResponseEntity<ApiResponse<Void>> handleDisabledException(DisabledException ex) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.USER_DISABLED.name(), "User account is disabled"));
+        }
 
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(ErrorCode.ACCESS_DENIED.name(),
-                        "You do not have the required permissions to access this resource"));
-    }
+        @ExceptionHandler(AccessDeniedException.class)
+        public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(ApiResponse.error(ErrorCode.ACCESS_DENIED.name(),
+                                                "You do not have the required permissions to access this resource"));
+        }
 
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED.name(), "Authentication failed"));
-    }
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED.name(), "Authentication failed"));
+        }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(
-                        ErrorCode.INTERNAL_SERVER_ERROR.name(),
-                        "An unexpected error occurred on our end. Please contact support."));
-    }
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(ApiResponse.error(
+                                                ErrorCode.INTERNAL_SERVER_ERROR.name(),
+                                                "An unexpected error occurred on our end. Please contact support."));
+        }
 }

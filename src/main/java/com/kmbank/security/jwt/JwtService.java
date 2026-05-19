@@ -3,9 +3,8 @@ package com.kmbank.security.jwt;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -15,18 +14,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
-@Service
+@RequiredArgsConstructor
 public class JwtService {
 
-    @Value("${jwt.secret}")
-    private String secretKey;
-
-    @Value("${jwt.expiration-seconds}")
-    private long jwtExpirationSeconds;
+    private final JwtProperties jwtProperties;
 
     @PostConstruct
     public void init() {
-        if (secretKey == null || secretKey.length() < 32) {
+        if (jwtProperties.getSecret() == null || jwtProperties.getSecret().length() < 32) {
             throw new IllegalArgumentException("JWT secret must be at least 256 bits (32 characters) for HS256");
         }
     }
@@ -53,14 +48,13 @@ public class JwtService {
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("username", username);
         extraClaims.put("role", role);
-        return buildToken(extraClaims, userId, jwtExpirationSeconds * 1000);
+        return buildToken(extraClaims, userId, jwtProperties.getExpirationSeconds() * 1000);
     }
 
     private String buildToken(
             Map<String, Object> extraClaims,
             UUID userId,
-            long expirationMs
-    ) {
+            long expirationMs) {
         long nowMillis = System.currentTimeMillis();
         return Jwts.builder()
                 .claims(extraClaims)
@@ -93,6 +87,6 @@ public class JwtService {
     }
 
     private SecretKey getSignInKey() {
-        return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+        return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 }
