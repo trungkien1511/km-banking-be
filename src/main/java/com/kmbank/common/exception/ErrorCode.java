@@ -9,5 +9,6 @@ public enum ErrorCode {
     USER_LOCKED,
     USER_DISABLED,
     RESOURCE_NOT_FOUND,
+    USER_NOT_FOUND,
     INTERNAL_SERVER_ERROR
 }

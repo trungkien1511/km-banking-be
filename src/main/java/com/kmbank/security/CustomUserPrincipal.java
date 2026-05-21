@@ -8,6 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
@@ -21,14 +22,18 @@ public class CustomUserPrincipal implements UserDetails {
     private final String username;
     private final String password;
     private final UserStatus status;
+    private final Instant lockedUntil;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final User user;
 
     public CustomUserPrincipal(User user) {
         this.id = Objects.requireNonNull(user.getId(), "User ID cannot be null");
         this.username = user.getUsername();
         this.password = user.getPasswordHash();
         this.status = user.getStatus();
+        this.lockedUntil = user.getLockedUntil();
         this.authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+        this.user = user;
     }
 
     @Override
@@ -51,9 +56,16 @@ public class CustomUserPrincipal implements UserDetails {
         return true;
     }
 
+    /**
+     * Returns false if:
+     * - status is LOCKED (permanent lockout, requires admin action)
+     * - lockedUntil is set and still in the future (temporary lockout due to brute-force)
+     */
     @Override
     public boolean isAccountNonLocked() {
-        return status != UserStatus.LOCKED;
+        if (status == UserStatus.LOCKED) return false;
+        if (lockedUntil == null) return true;
+        return lockedUntil.isBefore(Instant.now());
     }
 
     @Override
