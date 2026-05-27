@@ -72,8 +72,8 @@ public class AuthService {
         log.info("Attempting login for identifier: {}", normalizedIdentifier);
 
         try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(normalizedIdentifier, request.getPassword()));
+            Authentication authentication = authenticationManager
+                    .authenticate(new UsernamePasswordAuthenticationToken(normalizedIdentifier, request.getPassword()));
 
             CustomUserPrincipal principal = (CustomUserPrincipal) authentication.getPrincipal();
             User user = principal.getUser();

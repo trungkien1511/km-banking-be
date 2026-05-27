@@ -18,10 +18,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import com.kmbank.modules.auth.dto.request.RefreshTokenRequest;
 
-/**
- * REST Controller for handling authentication-related operations such as login,
- * logout, and retrieving current user profile.
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -30,36 +26,21 @@ public class AuthController {
 
     private final AuthService authService;
 
-    /**
-     * Authenticates a user and generates an access token.
-     *
-     * @param request the login request containing identifier (username/phone) and
-     *                password
-     * @return the login response containing the JWT token
-     */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest request,
-            HttpServletRequest httpRequest) { // ← THÊM parameter này
+            HttpServletRequest httpRequest) {
 
         log.info("Login request received for identifier: {}", request.getIdentifier());
-        LoginResponse response = authService.login(request, httpRequest); // ← Truyền vào service
+        LoginResponse response = authService.login(request, httpRequest);
         log.info("Login successful for user: {}", response.getUser().getUsername());
         return ResponseEntity.ok(ApiResponse.success(response, "Login successful"));
     }
 
-    /**
-     * Retrieves the profile information of the currently authenticated user.
-     *
-     * @param principal the currently authenticated user's principal injected by
-     *                  Spring Security
-     * @return the user's profile information
-     */
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<AuthUserResponse>> getMe(@AuthenticationPrincipal CustomUserPrincipal principal) {
-        log.info("REST request to get current user profile"); // #1: Log request
+        log.info("REST request to get current user profile");
 
-        // #4: Kiểm tra principal null trong trường hợp filter lọt qua hoặc cấu hình sai
         if (principal == null) {
             log.warn("Unauthorized attempt to access /me endpoint");
             throw new BusinessException("User is not authenticated", ErrorCode.UNAUTHORIZED);

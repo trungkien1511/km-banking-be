@@ -35,7 +35,7 @@ public class LoginHistory extends BaseEntity {
     @Column(name = "user_agent")
     private String userAgent;
 
-    @NonNull // ← Thêm annotation này
+    @NonNull
     @Column(name = "login_status", nullable = false)
     private String loginStatus;
 

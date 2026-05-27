@@ -11,7 +11,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Objects;
 import java.util.UUID;
 
 @Getter
@@ -27,7 +26,7 @@ public class CustomUserPrincipal implements UserDetails {
     private final User user;
 
     public CustomUserPrincipal(User user) {
-        this.id = Objects.requireNonNull(user.getId(), "User ID cannot be null");
+        this.id = user.getId();
         this.username = user.getUsername();
         this.password = user.getPasswordHash();
         this.status = user.getStatus();
@@ -56,15 +55,12 @@ public class CustomUserPrincipal implements UserDetails {
         return true;
     }
 
-    /**
-     * Returns false if:
-     * - status is LOCKED (permanent lockout, requires admin action)
-     * - lockedUntil is set and still in the future (temporary lockout due to brute-force)
-     */
     @Override
     public boolean isAccountNonLocked() {
-        if (status == UserStatus.LOCKED) return false;
-        if (lockedUntil == null) return true;
+        if (status == UserStatus.LOCKED)
+            return false;
+        if (lockedUntil == null)
+            return true;
         return lockedUntil.isBefore(Instant.now());
     }
 

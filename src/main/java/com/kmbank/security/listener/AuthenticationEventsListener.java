@@ -32,10 +32,6 @@ public class AuthenticationEventsListener {
     private final LoginHistoryRepository loginHistoryRepository;
     private final HttpRequestUtils httpRequestUtils;
 
-    /**
-     * Handles processing after a successful authentication.
-     * Resets failed login attempts and updates last login time.
-     */
     @EventListener
     @Transactional
     public void onSuccess(AuthenticationSuccessEvent event) {
@@ -57,10 +53,6 @@ public class AuthenticationEventsListener {
         }
     }
 
-    /**
-     * Handles processing after a failed authentication attempt due to bad credentials.
-     * Records the failure in login history and triggers temporary lockout if max attempts exceeded.
-     */
     @EventListener
     @Transactional
     public void onFailure(AuthenticationFailureBadCredentialsEvent event) {
@@ -113,7 +105,8 @@ public class AuthenticationEventsListener {
 
     private void saveLoginHistory(UUID userId, String status, String failureReason, HttpServletRequest request) {
         try {
-            if (request == null) return;
+            if (request == null)
+                return;
 
             LoginHistory history = LoginHistory.builder()
                     .userId(userId)
@@ -132,7 +125,8 @@ public class AuthenticationEventsListener {
 
     private void saveLoginHistoryForUnknownIdentifier(String identifier, HttpServletRequest request) {
         try {
-            if (request == null) return;
+            if (request == null)
+                return;
 
             LoginHistory history = LoginHistory.builder()
                     .userId(null)
