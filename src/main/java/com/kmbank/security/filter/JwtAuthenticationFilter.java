@@ -74,7 +74,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 // 3. Kiểm tra tính hợp lệ của Token trước khi load DB (Tiết kiệm hiệu năng)
-                if (!jwtService.isTokenValid(jwt, userId)) {
+                if (!jwtService.isAccessTokenValid(jwt, userId)) {
                     sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED,
                             "Token expired or invalid");
                     return;

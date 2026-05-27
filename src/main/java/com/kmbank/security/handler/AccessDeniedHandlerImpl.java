@@ -25,15 +25,19 @@ public class AccessDeniedHandlerImpl implements AccessDeniedHandler {
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException accessDeniedException) throws IOException, ServletException {
-        
-        log.error("Access denied error: {}", accessDeniedException.getMessage());
+        String uri = request.getRequestURI();
+        String method = request.getMethod();
+        String ip = request.getRemoteAddr();
+
+        log.warn("Access denied for request: {} {} from IP: {} - Reason: {}",
+                method, uri, ip, accessDeniedException.getMessage());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
 
         ApiResponse<Void> apiResponse = ApiResponse.error(
                 ErrorCode.ACCESS_DENIED.name(),
-                "You do not have permission to access this resource"
+                accessDeniedException.getMessage()
         );
 
         objectMapper.writeValue(response.getOutputStream(), apiResponse);

@@ -25,15 +25,19 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint {
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException, ServletException {
-        
-        log.error("Unauthorized error: {}", authException.getMessage());
+        String uri = request.getRequestURI();
+        String method = request.getMethod();
+        String ip = request.getRemoteAddr();
+
+        log.warn("Unauthorized access attempt - URI: {} {}, IP: {}, Message: {}",
+                method, uri, ip, authException.getMessage());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
         ApiResponse<Void> apiResponse = ApiResponse.error(
                 ErrorCode.UNAUTHORIZED.name(),
-                "Authentication is required to access this resource"
+                authException.getMessage()
         );
 
         objectMapper.writeValue(response.getOutputStream(), apiResponse);

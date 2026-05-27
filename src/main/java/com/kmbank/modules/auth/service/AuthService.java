@@ -7,9 +7,15 @@ import com.kmbank.modules.auth.dto.response.AuthUserResponse;
 import com.kmbank.modules.auth.dto.response.LoginResponse;
 import com.kmbank.modules.auth.mapper.AuthMapper;
 import com.kmbank.modules.user.entity.User;
+import com.kmbank.modules.user.entity.LoginHistory;
+import com.kmbank.modules.user.entity.RefreshToken;
 import com.kmbank.modules.user.repository.UserRepository;
+import com.kmbank.modules.user.repository.LoginHistoryRepository;
+import com.kmbank.modules.user.repository.RefreshTokenRepository;
 import com.kmbank.security.CustomUserPrincipal;
 import com.kmbank.security.jwt.JwtService;
+import com.kmbank.security.utils.HttpRequestUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,71 +25,153 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.UUID;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Service handling authentication operations such as login and retrieving
  * current user profile.
  */
-@Slf4j // #1: Thêm logging
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
-    // #7: Định nghĩa constant cho thông báo lỗi tránh hardcode
     private static final String MSG_USER_NOT_FOUND = "User not found";
 
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final AuthMapper authMapper;
+    private final LoginHistoryRepository loginHistoryRepository;
+    private final HttpRequestUtils httpRequestUtils;
+    private final RefreshTokenRepository refreshTokenRepository;
 
-    // #5: Inject trực tiếp value expiration thay vì inject nguyên JwtProperties
     @Value("${jwt.expiration-seconds}")
     private long jwtExpirationSeconds;
 
     /**
+     * Hash token using SHA-256 (stable hash, same input = same output)
+     */
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("SHA-256 algorithm not found", e);
+            throw new RuntimeException("SHA-256 algorithm not found", e);
+        }
+    }
+
+    /**
      * Authenticates a user with credentials and generates a JWT token.
      *
-     * @param request the login request payload containing identifier and password
+     * @param request     the login request payload containing identifier and
+     *                    password
+     * @param httpRequest the HTTP servlet request to capture IP and Device details
      * @return the login response containing access token and user information
      */
     @Transactional
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         String normalizedIdentifier = request.getIdentifier() != null ? request.getIdentifier().trim() : "";
-        log.info("Attempting login for identifier: {}", normalizedIdentifier); // #8: Log audit khi đăng nhập
+        log.info("Attempting login for identifier: {}", normalizedIdentifier);
 
         try {
-            // Authenticate user via Spring Security AuthenticationManager
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(normalizedIdentifier, request.getPassword()));
 
-            // #3: Chỉ query DB 1 lần. Lấy trực tiếp User entity đã được load sẵn trong
-            // Principal
             CustomUserPrincipal principal = (CustomUserPrincipal) authentication.getPrincipal();
             User user = principal.getUser();
 
             if (user == null) {
-                // #2: Nhất quán exception - dùng BusinessException thay vì
-                // UsernameNotFoundException
                 log.error("Authentication succeeded but User entity is missing from principal");
                 throw new BusinessException(MSG_USER_NOT_FOUND, ErrorCode.USER_NOT_FOUND);
             }
 
-            // Generate token containing userId, username, and role
-            String jwtToken = jwtService.generateToken(user.getId(), user.getUsername(), user.getRole().name());
+            String accessToken = jwtService.generateAccessToken(user.getId(), user.getUsername(),
+                    user.getRole().name());
+            String refreshToken = jwtService.generateRefreshToken(user.getId());
 
-            log.info("Login successful for user: {}", user.getUsername()); // #8: Log success
+            saveRefreshToken(user.getId(), refreshToken);
+            saveLoginHistory(user.getId(), "SUCCESS", null, httpRequest);
+
+            log.info("Login successful for user: {}", user.getUsername());
 
             return LoginResponse.builder()
-                    .accessToken(jwtToken)
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
                     .expiresIn(jwtExpirationSeconds)
                     .user(authMapper.toAuthUserResponse(user))
                     .build();
 
         } catch (Exception e) {
-            log.warn("Login failed for identifier: {} - Reason: {}", normalizedIdentifier, e.getMessage()); // #8: Log
-                                                                                                            // failure
+            log.warn("Login failed for identifier: {} - Reason: {}", normalizedIdentifier, e.getMessage());
             throw e;
         }
+    }
+
+    /**
+     * Refresh access token using refresh token (with token rotation).
+     */
+    @Transactional
+    public LoginResponse refreshToken(String refreshToken, HttpServletRequest httpRequest) {
+        log.debug("Refresh token request received");
+
+        // 1. Tìm refresh token trong database bằng SHA-256 hash
+        String tokenHash = hashToken(refreshToken);
+        RefreshToken storedToken = refreshTokenRepository.findByTokenHashAndRevokedFalse(tokenHash)
+                .orElseThrow(() -> new BusinessException("Invalid refresh token", ErrorCode.UNAUTHORIZED));
+
+        // 2. Kiểm tra hết hạn
+        if (storedToken.getExpiresAt().isBefore(Instant.now())) {
+            refreshTokenRepository.delete(storedToken);
+            throw new BusinessException("Refresh token expired", ErrorCode.UNAUTHORIZED);
+        }
+
+        // 3. Lấy user
+        User user = userRepository.findById(storedToken.getUserId())
+                .orElseThrow(() -> new BusinessException("User not found", ErrorCode.USER_NOT_FOUND));
+
+        // 4. Tạo access token mới + rotate refresh token
+        String newAccessToken = jwtService.generateAccessToken(user.getId(), user.getUsername(), user.getRole().name());
+        String newRefreshToken = jwtService.generateRefreshToken(user.getId());
+
+        // 5. Revoke token cũ, lưu token mới
+        refreshTokenRepository.delete(storedToken);
+        saveRefreshToken(user.getId(), newRefreshToken);
+
+        log.info("Token rotated for user: {}", user.getUsername());
+        saveLoginHistory(user.getId(), "REFRESHED", null, httpRequest);
+
+        return LoginResponse.builder()
+                .accessToken(newAccessToken)
+                .expiresIn(jwtService.getExpirationMs() / 1000)
+                .refreshToken(newRefreshToken)
+                .user(authMapper.toAuthUserResponse(user))
+                .build();
+    }
+
+    private void saveRefreshToken(UUID userId, String refreshToken) {
+        // Xóa token cũ trước khi lưu mới — mỗi user chỉ có 1 refresh token active
+        refreshTokenRepository.deleteByUserId(userId);
+
+        String tokenHash = hashToken(refreshToken);
+
+        RefreshToken token = RefreshToken.builder()
+                .userId(userId)
+                .tokenHash(tokenHash)
+                .revoked(false)
+                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .build();
+
+        refreshTokenRepository.save(token);
+        log.debug("Refresh token saved for user: {}", userId);
     }
 
     /**
@@ -98,7 +186,6 @@ public class AuthService {
             throw new BusinessException(MSG_USER_NOT_FOUND, ErrorCode.USER_NOT_FOUND);
         }
 
-        // #4: Kiểm tra user null trong getMe và dùng ErrorCode.USER_NOT_FOUND
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> {
                     log.warn("User ID {} not found in database", principal.getId());
@@ -106,5 +193,37 @@ public class AuthService {
                 });
 
         return authMapper.toAuthUserResponse(user);
+    }
+
+    private void saveLoginHistory(UUID userId, String status, String failureReason, HttpServletRequest request) {
+        try {
+            LoginHistory history = LoginHistory.builder()
+                    .userId(userId)
+                    .ipAddress(httpRequestUtils.getClientIp(request))
+                    .deviceName(httpRequestUtils.getDeviceName(request))
+                    .userAgent(httpRequestUtils.getUserAgent(request))
+                    .loginStatus(status)
+                    .failureReason(failureReason)
+                    .build();
+            loginHistoryRepository.save(history);
+            log.debug("Login history saved for user: {} - status: {}", userId, status);
+        } catch (Exception e) {
+            log.error("Failed to save login history for user: {}", userId, e);
+        }
+    }
+
+    /**
+     * Logout - revoke refresh token
+     */
+    @Transactional
+    public void logout(String refreshToken) {
+        if (refreshToken == null) {
+            log.warn("Logout called with null refresh token — nothing to revoke");
+            return;
+        }
+
+        String tokenHash = hashToken(refreshToken);
+        refreshTokenRepository.deleteByTokenHash(tokenHash);
+        log.info("User logged out, refresh token revoked");
     }
 }

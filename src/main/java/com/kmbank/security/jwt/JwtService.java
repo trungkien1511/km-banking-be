@@ -105,14 +105,18 @@ public class JwtService {
      * @param role     role của user
      * @return chuỗi JWT token
      */
-    public String generateToken(UUID userId, String username, String role) {
-        // #7: Log khi bắt đầu sinh token
+    public String generateAccessToken(UUID userId, String username, String role) {
         log.info("Generating token for user: {} with role: {}", username, role);
         Map<String, Object> extraClaims = new HashMap<>();
-        // #5: Dùng constant thay vì chuỗi trực tiếp
         extraClaims.put(CLAIM_USERNAME, username);
         extraClaims.put(CLAIM_ROLE, role);
-        return buildToken(extraClaims, userId, jwtProperties.getExpirationSeconds() * 1000);
+        return buildToken(extraClaims, userId, getExpirationMs());
+    }
+
+    public String generateRefreshToken(UUID userId) {
+        long refreshExpirationMs = jwtProperties.getRefreshExpirationDays() * 24 * 60 * 60 * 1000;
+        log.info("Generating refresh token for user: {}", userId);
+        return buildToken(new HashMap<>(), userId, refreshExpirationMs);
     }
 
     private String buildToken(
@@ -136,8 +140,7 @@ public class JwtService {
      * @param expectedUserId User ID mong đợi
      * @return true nếu token hợp lệ, false nếu không
      */
-    // #4: Bọc try-catch để bắt các loại exception từ thư viện jjwt
-    public boolean isTokenValid(String token, UUID expectedUserId) {
+    public boolean isAccessTokenValid(String token, UUID expectedUserId) {
         if (isTokenInvalid(token)) {
             return false;
         }
@@ -152,6 +155,24 @@ public class JwtService {
             return false;
         } catch (Exception e) {
             log.error("Unexpected error validating token for user: {}", expectedUserId, e);
+            return false;
+        }
+    }
+
+    public boolean isRefreshTokenValid(String token) {
+        // Thêm null check (giống access token)
+        if (token == null || token.isBlank()) {
+            log.warn("Refresh token is null or empty");
+            return false;
+        }
+
+        try {
+            return !isTokenExpired(token);
+        } catch (ExpiredJwtException e) {
+            log.warn("Refresh token expired");
+            return false;
+        } catch (Exception e) {
+            log.warn("Refresh token validation failed: {}", e.getMessage());
             return false;
         }
     }
@@ -189,5 +210,12 @@ public class JwtService {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Extract expiration time in milliseconds
+     */
+    public long getExpirationMs() {
+        return jwtProperties.getExpirationSeconds() * 1000;
     }
 }

@@ -19,5 +19,7 @@ public class LoginResponse {
 
     private long expiresIn;
 
+    private String refreshToken;
+
     private AuthUserResponse user;
 }
