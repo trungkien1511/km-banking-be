@@ -55,9 +55,6 @@ public class AuthService {
     @Value("${jwt.expiration-seconds}")
     private long jwtExpirationSeconds;
 
-    /**
-     * Hash token using SHA-256 (stable hash, same input = same output)
-     */
     private String hashToken(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -69,14 +66,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Authenticates a user with credentials and generates a JWT token.
-     *
-     * @param request     the login request payload containing identifier and
-     *                    password
-     * @param httpRequest the HTTP servlet request to capture IP and Device details
-     * @return the login response containing access token and user information
-     */
     @Transactional
     public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         String normalizedIdentifier = request.getIdentifier() != null ? request.getIdentifier().trim() : "";
@@ -116,33 +105,25 @@ public class AuthService {
         }
     }
 
-    /**
-     * Refresh access token using refresh token (with token rotation).
-     */
     @Transactional
     public LoginResponse refreshToken(String refreshToken, HttpServletRequest httpRequest) {
         log.debug("Refresh token request received");
 
-        // 1. Tìm refresh token trong database bằng SHA-256 hash
         String tokenHash = hashToken(refreshToken);
         RefreshToken storedToken = refreshTokenRepository.findByTokenHashAndRevokedFalse(tokenHash)
                 .orElseThrow(() -> new BusinessException("Invalid refresh token", ErrorCode.UNAUTHORIZED));
 
-        // 2. Kiểm tra hết hạn
         if (storedToken.getExpiresAt().isBefore(Instant.now())) {
             refreshTokenRepository.delete(storedToken);
             throw new BusinessException("Refresh token expired", ErrorCode.UNAUTHORIZED);
         }
 
-        // 3. Lấy user
         User user = userRepository.findById(storedToken.getUserId())
                 .orElseThrow(() -> new BusinessException("User not found", ErrorCode.USER_NOT_FOUND));
 
-        // 4. Tạo access token mới + rotate refresh token
         String newAccessToken = jwtService.generateAccessToken(user.getId(), user.getUsername(), user.getRole().name());
         String newRefreshToken = jwtService.generateRefreshToken(user.getId());
 
-        // 5. Revoke token cũ, lưu token mới
         refreshTokenRepository.delete(storedToken);
         saveRefreshToken(user.getId(), newRefreshToken);
 
@@ -158,7 +139,6 @@ public class AuthService {
     }
 
     private void saveRefreshToken(UUID userId, String refreshToken) {
-        // Xóa token cũ trước khi lưu mới — mỗi user chỉ có 1 refresh token active
         refreshTokenRepository.deleteByUserId(userId);
 
         String tokenHash = hashToken(refreshToken);
@@ -174,12 +154,6 @@ public class AuthService {
         log.debug("Refresh token saved for user: {}", userId);
     }
 
-    /**
-     * Retrieves the profile information of the currently authenticated user.
-     *
-     * @param principal the authenticated principal of the current user
-     * @return the profile information
-     */
     public AuthUserResponse getMe(CustomUserPrincipal principal) {
         if (principal == null || principal.getId() == null) {
             log.warn("getMe called with null or invalid principal");
@@ -212,9 +186,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Logout - revoke refresh token
-     */
     @Transactional
     public void logout(String refreshToken) {
         if (refreshToken == null) {

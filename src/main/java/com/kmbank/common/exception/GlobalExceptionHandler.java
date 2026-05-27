@@ -18,98 +18,94 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// #1: Thêm @Slf4j để log exception chi tiết phục vụ debug
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
-        log.warn("Business exception occurred: {} - {}", ex.getErrorCode(), ex.getMessage());
-        return ResponseEntity.status(ex.getErrorCode().getHttpStatus())
-                .body(ApiResponse.error(ex.getErrorCode().name(), ex.getMessage()));
-    }
+        @ExceptionHandler(BusinessException.class)
+        public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
+                log.warn("Business exception occurred: {} - {}", ex.getErrorCode(), ex.getMessage());
+                return ResponseEntity.status(ex.getErrorCode().getHttpStatus())
+                                .body(ApiResponse.error(ex.getErrorCode().name(), ex.getMessage()));
+        }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
-        log.warn("Validation exception occurred: {}", ex.getMessage());
-        
-        // #2: Xử lý chi tiết cả Field Errors và Global Errors
-        List<ApiResponse.FieldError> validationErrors = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .map(err -> new ApiResponse.FieldError(err.getField(), err.getDefaultMessage()))
-                .collect(Collectors.toList());
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
+                log.warn("Validation exception occurred: {}", ex.getMessage());
 
-        ex.getBindingResult().getGlobalErrors().forEach(err -> 
-                validationErrors.add(new ApiResponse.FieldError(err.getObjectName(), err.getDefaultMessage()))
-        );
+                List<ApiResponse.FieldError> validationErrors = ex.getBindingResult()
+                                .getFieldErrors()
+                                .stream()
+                                .map(err -> new ApiResponse.FieldError(err.getField(), err.getDefaultMessage()))
+                                .collect(Collectors.toList());
 
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ApiResponse.validationError(validationErrors));
-    }
+                ex.getBindingResult().getGlobalErrors().forEach(err -> validationErrors
+                                .add(new ApiResponse.FieldError(err.getObjectName(), err.getDefaultMessage())));
 
-    // #3: Xử lý lỗi JSON malformed (VD: sai cú pháp JSON, truyền string vào field int)
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
-        log.warn("Malformed JSON request", ex);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("BAD_REQUEST", "Malformed JSON request body or invalid data types"));
-    }
+                return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                                .body(ApiResponse.validationError(validationErrors));
+        }
 
-    // #4: Xử lý lỗi thiếu parameter bắt buộc trên URL
-    @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameter(MissingServletRequestParameterException ex) {
-        log.warn("Missing required parameter: {}", ex.getParameterName());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("BAD_REQUEST", "Missing required parameter: " + ex.getParameterName()));
-    }
+        @ExceptionHandler(HttpMessageNotReadableException.class)
+        public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+                log.warn("Malformed JSON request", ex);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ApiResponse.error("BAD_REQUEST",
+                                                "Malformed JSON request body or invalid data types"));
+        }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
-        log.warn("Bad credentials error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.INVALID_CREDENTIALS.name(),
-                        "Invalid username or password"));
-    }
+        @ExceptionHandler(MissingServletRequestParameterException.class)
+        public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameter(
+                        MissingServletRequestParameterException ex) {
+                log.warn("Missing required parameter: {}", ex.getParameterName());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(ApiResponse.error("BAD_REQUEST",
+                                                "Missing required parameter: " + ex.getParameterName()));
+        }
 
-    @ExceptionHandler(LockedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleLockedException(LockedException ex) {
-        log.warn("Account locked error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.USER_LOCKED.name(), "User account is locked"));
-    }
+        @ExceptionHandler(BadCredentialsException.class)
+        public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
+                log.warn("Bad credentials error: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.INVALID_CREDENTIALS.name(),
+                                                "Invalid username or password"));
+        }
 
-    @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDisabledException(DisabledException ex) {
-        log.warn("Account disabled error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.USER_DISABLED.name(), "User account is disabled"));
-    }
+        @ExceptionHandler(LockedException.class)
+        public ResponseEntity<ApiResponse<Void>> handleLockedException(LockedException ex) {
+                log.warn("Account locked error: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.USER_LOCKED.name(), "User account is locked"));
+        }
 
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
-        log.warn("Access denied error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(ErrorCode.ACCESS_DENIED.name(),
-                        "You do not have the required permissions to access this resource"));
-    }
+        @ExceptionHandler(DisabledException.class)
+        public ResponseEntity<ApiResponse<Void>> handleDisabledException(DisabledException ex) {
+                log.warn("Account disabled error: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.USER_DISABLED.name(), "User account is disabled"));
+        }
 
-    // #5: Fallback cho các AuthenticationException khác chưa được bắt cụ thể ở trên
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
-        log.warn("Authentication failed (fallback handler): {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED.name(), "Authentication failed"));
-    }
+        @ExceptionHandler(AccessDeniedException.class)
+        public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+                log.warn("Access denied error: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(ApiResponse.error(ErrorCode.ACCESS_DENIED.name(),
+                                                "You do not have the required permissions to access this resource"));
+        }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
-        // #1: Bắt buộc phải log.error cho Exception chung để trace stacktrace
-        log.error("Unexpected error occurred", ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(
-                        ErrorCode.INTERNAL_SERVER_ERROR.name(),
-                        "An unexpected error occurred on our end. Please contact support."));
-    }
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
+                log.warn("Authentication failed (fallback handler): {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED.name(), "Authentication failed"));
+        }
+
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+                log.error("Unexpected error occurred", ex);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(ApiResponse.error(
+                                                ErrorCode.INTERNAL_SERVER_ERROR.name(),
+                                                "An unexpected error occurred on our end. Please contact support."));
+        }
 }

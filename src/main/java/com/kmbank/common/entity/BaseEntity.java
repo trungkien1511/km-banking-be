@@ -23,11 +23,11 @@ public abstract class BaseEntity {
     @Column(name = "id", updatable = false, nullable = false)
     protected UUID id;
 
-    @CreationTimestamp // ← Thay vì @PrePersist
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     protected Instant createdAt;
 
-    @UpdateTimestamp // ← Thay vì @PreUpdate
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     protected Instant updatedAt;
 
