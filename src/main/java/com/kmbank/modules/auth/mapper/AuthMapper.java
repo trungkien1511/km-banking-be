@@ -20,7 +20,9 @@ public class AuthMapper {
                 .username(user.getUsername())
                 .phoneNumber(user.getPhoneNumber())
                 .fullName(user.getFullName())
+                .email(user.getEmail())
                 .role(user.getRole().name())
+                .status(user.getStatus().name())
                 .build();
     }
 }

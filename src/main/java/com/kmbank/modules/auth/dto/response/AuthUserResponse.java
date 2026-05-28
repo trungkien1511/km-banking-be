@@ -16,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({ "id", "username", "fullName", "phoneNumber", "role" })
+@JsonPropertyOrder({ "id", "username", "fullName", "phoneNumber", "email", "role", "status" })
 public class AuthUserResponse {
 
     private UUID id;
@@ -27,5 +27,9 @@ public class AuthUserResponse {
 
     private String fullName;
 
+    private String email;
+
     private String role;
+
+    private String status;
 }
