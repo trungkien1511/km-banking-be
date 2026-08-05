@@ -64,7 +64,7 @@ public class AuthenticationEventsListener {
         userRepository.findByUsernameOrPhoneNumber(identifier, identifier).ifPresentOrElse(user -> {
             saveLoginHistory(user.getId(), "FAILED", "Bad credentials", request);
 
-            if (user.getStatus() == UserStatus.LOCKED || user.getStatus() == UserStatus.DISABLED) {
+            if (user.getStatus() == UserStatus.LOCKED || user.getStatus() == UserStatus.INACTIVE) {
                 log.debug("[SECURITY] Skipping failed attempt tracking for {} account: {}",
                         user.getStatus(), maskUsername(user.getUsername()));
                 return;

@@ -25,7 +25,17 @@ public class CustomUserPrincipal implements UserDetails {
     private final Collection<? extends GrantedAuthority> authorities;
     private final User user;
 
+    /**
+     * The UUID of the {@code Customer} profile linked to this user.
+     * May be {@code null} if the user has no customer profile (e.g. admin/staff).
+     */
+    private final UUID customerId;
+
     public CustomUserPrincipal(User user) {
+        this(user, null);
+    }
+
+    public CustomUserPrincipal(User user, UUID customerId) {
         this.id = user.getId();
         this.username = user.getUsername();
         this.password = user.getPasswordHash();
@@ -33,6 +43,7 @@ public class CustomUserPrincipal implements UserDetails {
         this.lockedUntil = user.getLockedUntil();
         this.authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
         this.user = user;
+        this.customerId = customerId;
     }
 
     @Override

@@ -11,8 +11,15 @@ public enum ErrorCode {
     USER_LOCKED(HttpStatus.UNAUTHORIZED),
     USER_DISABLED(HttpStatus.UNAUTHORIZED),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND),
+    ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND),
-    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR),
+
+    // Phase 2: Dashboard API error codes
+    FORBIDDEN(HttpStatus.FORBIDDEN),
+    INVALID_PAGE(HttpStatus.BAD_REQUEST),
+    INVALID_LIMIT(HttpStatus.BAD_REQUEST),
+    USER_INACTIVE(HttpStatus.FORBIDDEN);
 
     private final HttpStatus httpStatus;
 

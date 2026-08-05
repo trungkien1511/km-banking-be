@@ -1,5 +1,7 @@
 package com.kmbank.security;
 
+import com.kmbank.modules.customer.entity.Customer;
+import com.kmbank.modules.customer.repository.CustomerRepository;
 import com.kmbank.modules.user.entity.User;
 import com.kmbank.modules.user.enums.UserStatus;
 import com.kmbank.modules.user.repository.UserRepository;
@@ -26,6 +28,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     private static final String MSG_USER_NOT_FOUND = "User not found";
 
     private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
 
     @Override
     @Transactional
@@ -43,12 +46,13 @@ public class CustomUserDetailsService implements UserDetailsService {
             userRepository.save(user);
         }
 
-        if (user.getStatus() == UserStatus.DISABLED || user.getStatus() == UserStatus.LOCKED) {
+        if (user.getStatus() == UserStatus.INACTIVE || user.getStatus() == UserStatus.LOCKED) {
             log.warn("[SECURITY] Attempted login on inactive/locked account: username={}, status={}",
                     user.getUsername(), user.getStatus());
         }
 
-        return new CustomUserPrincipal(user);
+        UUID customerId = resolveCustomerId(user.getId());
+        return new CustomUserPrincipal(user, customerId);
     }
 
     public UserDetails loadUserById(@NonNull UUID userId) throws UsernameNotFoundException {
@@ -58,9 +62,9 @@ public class CustomUserDetailsService implements UserDetailsService {
                     return new UsernameNotFoundException(MSG_USER_NOT_FOUND);
                 });
 
-        if (user.getStatus() == UserStatus.DISABLED) {
-            log.warn("[SECURITY] loadUserById: Access denied for disabled user: ID={}", userId);
-            throw new DisabledException("User account is disabled");
+        if (user.getStatus() == UserStatus.INACTIVE) {
+            log.warn("[SECURITY] loadUserById: Access denied for inactive user: ID={}", userId);
+            throw new DisabledException("User account is inactive");
         }
 
         if (user.getStatus() == UserStatus.LOCKED
@@ -69,13 +73,24 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new LockedException("User account is locked");
         }
 
-        return new CustomUserPrincipal(user);
+        UUID customerId = resolveCustomerId(user.getId());
+        return new CustomUserPrincipal(user, customerId);
     }
 
     private boolean isTemporaryLockExpired(User user) {
         return user.getLockedUntil() != null
                 && user.getLockedUntil().isBefore(Instant.now())
                 && user.getStatus() != UserStatus.LOCKED
-                && user.getStatus() != UserStatus.DISABLED; // #1: Sửa lỗi bỏ qua Disabled
+                && user.getStatus() != UserStatus.INACTIVE; // exclude permanently inactive accounts
+    }
+
+    /**
+     * Resolves the customer profile UUID for the given user.
+     * Returns {@code null} if no customer profile exists (e.g. admin/staff users).
+     */
+    private UUID resolveCustomerId(UUID userId) {
+        return customerRepository.findByUserId(userId)
+                .map(Customer::getId)
+                .orElse(null);
     }
 }

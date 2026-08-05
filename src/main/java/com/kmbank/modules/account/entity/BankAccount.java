@@ -28,20 +28,28 @@ public class BankAccount extends BaseEntity {
     @Column(name = "account_type", nullable = false)
     private AccountType accountType;
 
-    @Column(nullable = false)
-    private BigDecimal balance;
+    @Column(name = "balance", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal balance = BigDecimal.ZERO;
 
-    @Column(name = "available_balance", nullable = false)
-    private BigDecimal availableBalance;
+    @Column(name = "available_balance", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal availableBalance = BigDecimal.ZERO;
 
-    @Column(nullable = false)
-    private String currency;
+    @Column(name = "currency", nullable = false, length = 3)
+    @Builder.Default
+    private String currency = "VND";
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(name = "status", nullable = false)
     private AccountStatus status;
 
+    /**
+     * Optimistic locking — tránh race condition khi transfer đồng thời.
+     * Hibernate tự tăng version mỗi lần update; throw OptimisticLockException nếu conflict.
+     */
     @Version
-    @Column(nullable = false)
-    private Long version;
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 }
