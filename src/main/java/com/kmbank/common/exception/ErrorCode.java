@@ -19,7 +19,13 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN),
     INVALID_PAGE(HttpStatus.BAD_REQUEST),
     INVALID_LIMIT(HttpStatus.BAD_REQUEST),
-    USER_INACTIVE(HttpStatus.FORBIDDEN);
+    USER_INACTIVE(HttpStatus.FORBIDDEN),
+
+    // Phase 3: Transaction write error codes
+    INSUFFICIENT_FUNDS(HttpStatus.UNPROCESSABLE_ENTITY),
+    CONCURRENT_UPDATE(HttpStatus.CONFLICT),
+    TRANSFER_SAME_ACCOUNT(HttpStatus.BAD_REQUEST),
+    ACCOUNT_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY);
 
     private final HttpStatus httpStatus;
 

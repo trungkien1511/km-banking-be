@@ -21,7 +21,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -55,7 +57,7 @@ class AccountControllerTest {
     private CustomUserPrincipal principal;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         testUserId = UUID.randomUUID();
         testAccountId = UUID.randomUUID();
 
@@ -69,6 +71,27 @@ class AccountControllerTest {
                 .build();
 
         principal = new CustomUserPrincipal(user, UUID.randomUUID());
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(
+                (jakarta.servlet.http.HttpServletRequest) invocation.getArgument(0),
+                (jakarta.servlet.http.HttpServletResponse) invocation.getArgument(1)
+            );
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.http.HttpServletResponse response = invocation.getArgument(1);
+            response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+            return null;
+        }).when(authenticationEntryPoint).commence(any(), any(), any());
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.http.HttpServletResponse response = invocation.getArgument(1);
+            response.sendError(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN, "Forbidden");
+            return null;
+        }).when(accessDeniedHandler).handle(any(), any(), any());
     }
 
     // -----------------------------------------------------------------------

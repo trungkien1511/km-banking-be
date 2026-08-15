@@ -9,12 +9,15 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface BankAccountRepository extends JpaRepository<BankAccount, UUID> {
 
     List<BankAccount> findByCustomerId(UUID customerId);
+
+    Optional<BankAccount> findByAccountNumber(String accountNumber);
 
     boolean existsByAccountNumber(String accountNumber);
 

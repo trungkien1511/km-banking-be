@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -60,7 +61,7 @@ class DashboardControllerTest {
     private CustomUserPrincipal principalWithoutCustomer;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         testUserId = UUID.randomUUID();
         testCustomerId = UUID.randomUUID();
 
@@ -76,6 +77,27 @@ class DashboardControllerTest {
         // We use a builder-friendly approach: just create principal with a known user
         principalWithCustomer = new CustomUserPrincipal(user, testCustomerId);
         principalWithoutCustomer = new CustomUserPrincipal(user, null);
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(
+                (jakarta.servlet.http.HttpServletRequest) invocation.getArgument(0),
+                (jakarta.servlet.http.HttpServletResponse) invocation.getArgument(1)
+            );
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.http.HttpServletResponse response = invocation.getArgument(1);
+            response.sendError(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+            return null;
+        }).when(authenticationEntryPoint).commence(any(), any(), any());
+
+        doAnswer((org.mockito.stubbing.Answer<Object>) invocation -> {
+            jakarta.servlet.http.HttpServletResponse response = invocation.getArgument(1);
+            response.sendError(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN, "Forbidden");
+            return null;
+        }).when(accessDeniedHandler).handle(any(), any(), any());
     }
 
     // -----------------------------------------------------------------------
@@ -152,7 +174,6 @@ class DashboardControllerTest {
 
     @Test
     @DisplayName("GET /api/v1/dashboard - 401 Unauthorized when no authentication provided")
-    @WithMockUser
     void getDashboard_noAuth_returns401() throws Exception {
         // Without security post-processor, request is unauthenticated
         mockMvc.perform(get("/api/v1/dashboard"))

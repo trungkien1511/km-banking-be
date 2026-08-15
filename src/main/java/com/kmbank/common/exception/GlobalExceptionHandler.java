@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -98,6 +99,15 @@ public class GlobalExceptionHandler {
                 log.warn("Authentication failed (fallback handler): {}", ex.getMessage());
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                                 .body(ApiResponse.error(ErrorCode.UNAUTHORIZED.name(), "Authentication failed"));
+        }
+
+        @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+        public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(
+                        ObjectOptimisticLockingFailureException ex) {
+                log.warn("Optimistic locking failure: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(ApiResponse.error(ErrorCode.CONCURRENT_UPDATE.name(),
+                                                "Account was modified by another operation. Please try again."));
         }
 
         @ExceptionHandler(Exception.class)
