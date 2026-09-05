@@ -54,6 +54,15 @@ public class LedgerService {
         validateAccountActive(sender, "Source");
         validateAccountActive(receiver, "Destination");
 
+        // Guard against currency mismatch (defensive check — DB constrains VND-only today,
+        // but this prevents silent errors if multi-currency is introduced later).
+        if (!java.util.Objects.equals(sender.getCurrency(), receiver.getCurrency())) {
+            throw new BusinessException(
+                    "Currency mismatch: source account currency '" + sender.getCurrency()
+                            + "' does not match destination account currency '" + receiver.getCurrency() + "'",
+                    ErrorCode.CURRENCY_MISMATCH);
+        }
+
         if (sender.getAvailableBalance().compareTo(amount) < 0) {
             log.warn("Insufficient funds: sender={}, available={}, requested={}",
                     senderId, sender.getAvailableBalance(), amount);

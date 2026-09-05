@@ -28,4 +28,10 @@ public class TransferRequest {
     private BigDecimal amount;
 
     private String description;
+
+    /**
+     * Optional client-supplied idempotency key (recommended: UUID v4, max 36 chars).
+     * If provided, duplicate requests with the same key return the original response.
+     */
+    private String idempotencyKey;
 }

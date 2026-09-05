@@ -85,4 +85,14 @@ public class Transaction {
     @Column(name = "value_date", nullable = false)
     @Builder.Default
     private LocalDate valueDate = LocalDate.now();
+
+    /**
+     * Optional client-supplied idempotency key (UUID string, max 36 chars).
+     * When present, duplicate requests with the same key return the original response
+     * instead of creating a second transaction.
+     * The unique constraint is enforced at the DB level; a DataIntegrityViolationException
+     * on insert is caught by GlobalExceptionHandler and returned as 409.
+     */
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
 }

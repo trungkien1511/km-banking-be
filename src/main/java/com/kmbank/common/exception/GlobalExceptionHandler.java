@@ -2,6 +2,8 @@ package com.kmbank.common.exception;
 
 import com.kmbank.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -108,6 +110,56 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                                 .body(ApiResponse.error(ErrorCode.CONCURRENT_UPDATE.name(),
                                                 "Account was modified by another operation. Please try again."));
+        }
+
+        /**
+         * Handles unique-constraint violations from the database layer.
+         *
+         * <p>Spring wraps JDBC-level errors in {@link DataIntegrityViolationException}.
+         * We unwrap the cause chain to find Hibernate's {@link ConstraintViolationException},
+         * which carries the exact DB constraint name. This avoids brittle string matching
+         * against the full error message (which varies by driver and locale).</p>
+         *
+         * <p>Constraint name {@code transactions_idempotency_key_key} corresponds to the
+         * partial unique index on {@code transactions.idempotency_key}. A violation means
+         * two concurrent requests raced past the application-level idempotency check and
+         * both tried to INSERT with the same key; the loser surfaces this as 409.</p>
+         */
+        @ExceptionHandler(DataIntegrityViolationException.class)
+        public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(
+                        DataIntegrityViolationException ex) {
+                ConstraintViolationException cve = unwrapConstraintViolation(ex);
+                if (cve != null) {
+                        String constraintName = cve.getConstraintName();
+                        if ("transactions_idempotency_key_key".equalsIgnoreCase(constraintName)) {
+                                log.warn("Duplicate idempotency key constraint violation: constraint={}",
+                                                constraintName);
+                                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                                .body(ApiResponse.error(ErrorCode.DUPLICATE_TRANSACTION.name(),
+                                                                "A transaction with this idempotency key already exists."));
+                        }
+                }
+                // Other constraint violations (e.g. reference_number collision) remain 500
+                log.error("Data integrity violation: {}", ex.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR.name(),
+                                                "A data integrity error occurred. Please try again."));
+        }
+
+        /**
+         * Walks the exception cause chain to find a Hibernate
+         * {@link ConstraintViolationException}, which carries the DB constraint name.
+         * Returns {@code null} if none is found.
+         */
+        private ConstraintViolationException unwrapConstraintViolation(Throwable ex) {
+                Throwable cause = ex;
+                while (cause != null) {
+                        if (cause instanceof ConstraintViolationException cve) {
+                                return cve;
+                        }
+                        cause = cause.getCause();
+                }
+                return null;
         }
 
         @ExceptionHandler(Exception.class)
