@@ -1,6 +1,7 @@
 package com.kmbank.modules.customer.entity;
 
 import com.kmbank.common.entity.BaseEntity;
+import com.kmbank.modules.customer.enums.KycStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -21,9 +22,10 @@ public class Customer extends BaseEntity {
     @Column(name = "user_id", nullable = false, unique = true)
     private UUID userId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status", nullable = false)
     @Builder.Default
-    private String kycStatus = "NOT_SUBMITTED";
+    private KycStatus kycStatus = KycStatus.NOT_SUBMITTED;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "kyc_data", columnDefinition = "jsonb")
