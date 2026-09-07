@@ -4,6 +4,7 @@ import com.kmbank.common.exception.BusinessException;
 import com.kmbank.common.exception.ErrorCode;
 import com.kmbank.modules.account.entity.BankAccount;
 import com.kmbank.modules.account.enums.AccountStatus;
+import com.kmbank.modules.account.enums.AccountType;
 import com.kmbank.modules.account.repository.BankAccountRepository;
 import com.kmbank.modules.transaction.entity.LedgerEntry;
 import com.kmbank.modules.transaction.repository.LedgerEntryRepository;
@@ -63,7 +64,8 @@ public class LedgerService {
                     ErrorCode.CURRENCY_MISMATCH);
         }
 
-        if (sender.getAvailableBalance().compareTo(amount) < 0) {
+        boolean isSystemAccount = sender.getAccountType() == AccountType.SYSTEM;
+        if (!isSystemAccount && sender.getAvailableBalance().compareTo(amount) < 0) {
             log.warn("Insufficient funds: sender={}, available={}, requested={}",
                     senderId, sender.getAvailableBalance(), amount);
             throw new BusinessException("Insufficient funds", ErrorCode.INSUFFICIENT_FUNDS);

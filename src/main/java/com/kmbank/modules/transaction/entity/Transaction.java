@@ -71,6 +71,9 @@ public class Transaction {
     @Column(name = "failed_at")
     private Instant failedAt;
 
+    @Column(name = "failure_reason")
+    private String failureReason;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -95,4 +98,11 @@ public class Transaction {
      */
     @Column(name = "idempotency_key", unique = true)
     private String idempotencyKey;
+
+    /**
+     * Flagged for manual review by Ops/Admin during background reconciliation when an anomaly is detected.
+     */
+    @Column(name = "manual_review_flagged", nullable = false)
+    @Builder.Default
+    private Boolean manualReviewFlagged = false;
 }

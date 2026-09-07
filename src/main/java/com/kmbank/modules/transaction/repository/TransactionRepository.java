@@ -41,7 +41,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
             UPDATE Transaction t
             SET t.status = com.kmbank.modules.transaction.enums.TransactionStatus.PENDING,
                 t.failedAt = null,
-                t.description = null,
+                t.failureReason = null,
                 t.updatedAt = CURRENT_TIMESTAMP
             WHERE t.id = :id AND t.status = com.kmbank.modules.transaction.enums.TransactionStatus.FAILED
             """)
@@ -94,12 +94,13 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     long countCompletedByAccountId(@Param("accountId") UUID accountId);
 
     /**
-     * Find PENDING transactions older than the given threshold.
-     * Used by the reconciliation scheduler to detect stuck transactions.
+     * Find PENDING transactions older than the given threshold that have not been flagged for manual review.
+     * Used by the reconciliation scheduler to detect stuck transactions without querying flagged anomalies repeatedly.
      */
     @Query("""
             SELECT t FROM Transaction t
             WHERE t.status = 'PENDING'
+              AND (t.manualReviewFlagged IS NULL OR t.manualReviewFlagged = false)
               AND t.createdAt < :threshold
             """)
     List<Transaction> findPendingOlderThan(@Param("threshold") Instant threshold);

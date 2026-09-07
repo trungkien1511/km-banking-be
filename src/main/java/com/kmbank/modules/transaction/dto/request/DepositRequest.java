@@ -1,6 +1,8 @@
 package com.kmbank.modules.transaction.dto.request;
 
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -21,13 +23,15 @@ public class DepositRequest {
 
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be greater than zero")
+    @DecimalMax(value = "500000000.00", message = "Amount cannot exceed 500,000,000 VND per transaction")
     private BigDecimal amount;
 
     private String description;
 
     /**
-     * Optional client-supplied idempotency key (recommended: UUID v4, max 36 chars).
-     * If provided, duplicate requests with the same key return the original response.
+     * Mandatory client-supplied idempotency key (UUID v4 format).
+     * Used to detect duplicate requests and ensure safe retry handling.
      */
+    @NotBlank(message = "Idempotency key is required")
     private String idempotencyKey;
 }

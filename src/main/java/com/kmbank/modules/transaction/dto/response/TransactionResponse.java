@@ -24,7 +24,7 @@ import java.util.UUID;
         "id", "referenceNumber", "transactionType", "status",
         "amount", "fee", "currency", "direction",
         "sourceAccountId", "destinationAccountId",
-        "description", "valueDate", "createdAt"
+        "description", "failureReason", "valueDate", "createdAt"
 })
 public class TransactionResponse {
 
@@ -53,6 +53,10 @@ public class TransactionResponse {
     private UUID destinationAccountId;
 
     private String description;
+
+    private String failureReason;
+
+    private Boolean manualReviewFlagged;
 
     /**
      * Accounting date — used in bank statements and financial reports.
@@ -105,6 +109,8 @@ public class TransactionResponse {
                 .sourceAccountId(transaction.getSourceAccountId())
                 .destinationAccountId(transaction.getDestinationAccountId())
                 .description(transaction.getDescription())
+                .failureReason(transaction.getFailureReason())
+                .manualReviewFlagged(transaction.getManualReviewFlagged())
                 .valueDate(transaction.getValueDate())
                 .createdAt(transaction.getCreatedAt())
                 .build();

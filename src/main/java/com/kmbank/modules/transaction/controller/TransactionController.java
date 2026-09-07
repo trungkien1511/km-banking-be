@@ -8,6 +8,7 @@ import com.kmbank.modules.transaction.dto.response.PaginatedTransactionResponse;
 import com.kmbank.modules.transaction.dto.response.TransactionResponse;
 import com.kmbank.modules.transaction.service.TransactionService;
 import com.kmbank.security.CustomUserPrincipal;
+import com.kmbank.security.annotation.RateLimit;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,7 @@ public class TransactionController {
         /**
          * Executes an internal transfer between two bank accounts.
          */
+        @RateLimit(requestsPerMinute = 10)
         @PostMapping("/transactions/transfer")
         public ResponseEntity<ApiResponse<TransactionResponse>> transfer(
                         @Valid @RequestBody TransferRequest request,
@@ -77,6 +79,7 @@ public class TransactionController {
         /**
          * Executes a mock deposit into a bank account (for testing).
          */
+        @RateLimit(requestsPerMinute = 10)
         @PostMapping("/transactions/deposit")
         public ResponseEntity<ApiResponse<TransactionResponse>> deposit(
                         @Valid @RequestBody DepositRequest request,
@@ -92,6 +95,7 @@ public class TransactionController {
         /**
          * Executes a mock withdrawal from a bank account (for testing).
          */
+        @RateLimit(requestsPerMinute = 10)
         @PostMapping("/transactions/withdrawal")
         public ResponseEntity<ApiResponse<TransactionResponse>> withdraw(
                         @Valid @RequestBody WithdrawalRequest request,

@@ -116,7 +116,7 @@ public class PendingTransactionService {
         Transaction txn = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException("Transaction not found", ErrorCode.RESOURCE_NOT_FOUND));
         txn.setStatus(TransactionStatus.FAILED);
-        txn.setDescription(reason);
+        txn.setFailureReason(reason);
         txn.setFailedAt(Instant.now());
         txn.setUpdatedAt(Instant.now());
         transactionRepository.save(txn);
@@ -127,8 +127,9 @@ public class PendingTransactionService {
     // -------------------------------------------------------------------------
 
     private String generateReferenceNumber() {
-        return "TXN-" + java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String timestamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        String randomPart = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+        return "TXN-" + timestamp + "-" + randomPart;
     }
 }

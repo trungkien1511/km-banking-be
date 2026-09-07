@@ -64,26 +64,38 @@ public class ReconciliationExecutorService {
             return null;
         }
 
-        boolean hasLedgerEntries = ledgerEntryRepository.existsByTransactionId(fresh.getId());
+        long ledgerEntryCount = ledgerEntryRepository.countByTransactionId(fresh.getId());
 
-        if (hasLedgerEntries) {
+        if (ledgerEntryCount == 2) {
             fresh.setStatus(TransactionStatus.COMPLETED);
             fresh.setCompletedAt(Instant.now());
             fresh.setUpdatedAt(Instant.now());
             transactionRepository.save(fresh);
-            log.warn("Reconciled txnId={} (ref={}) -> COMPLETED (ledger entries found)",
+            log.warn("Reconciled txnId={} (ref={}) -> COMPLETED (2 ledger entries found)",
                     fresh.getId(), fresh.getReferenceNumber());
             return TransactionStatus.COMPLETED;
-        } else {
+        } else if (ledgerEntryCount == 0) {
             fresh.setStatus(TransactionStatus.FAILED);
             fresh.setFailedAt(Instant.now());
             fresh.setUpdatedAt(Instant.now());
-            fresh.setDescription("Reconciled as FAILED: transaction stuck in PENDING state "
+            fresh.setFailureReason("Reconciled as FAILED: transaction stuck in PENDING state "
                     + "with no ledger entries after " + pendingThresholdMinutes + " minutes");
             transactionRepository.save(fresh);
             log.warn("Reconciled txnId={} (ref={}) -> FAILED (no ledger entries found)",
                     fresh.getId(), fresh.getReferenceNumber());
             return TransactionStatus.FAILED;
+        } else {
+            // Partial ledger entries detected (e.g. 1 entry) — anomaly requiring manual review.
+            // Do NOT change status automatically (leave as PENDING) to prevent financial inconsistency.
+            // Only log CRITICAL error once upon initial flag to avoid spamming logs on subsequent scheduler runs.
+            if (!Boolean.TRUE.equals(fresh.getManualReviewFlagged())) {
+                log.error("CRITICAL: Partial ledger entries detected (count={}) for txnId={} (ref={}) — manual review required, status NOT changed",
+                        ledgerEntryCount, fresh.getId(), fresh.getReferenceNumber());
+                fresh.setManualReviewFlagged(true);
+                fresh.setUpdatedAt(Instant.now());
+                transactionRepository.save(fresh);
+            }
+            return null;
         }
     }
 }

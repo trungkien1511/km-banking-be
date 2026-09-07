@@ -5,6 +5,7 @@ import com.kmbank.modules.transaction.enums.TransactionStatus;
 import com.kmbank.modules.transaction.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ public class ReconciliationService {
      * transaction so a single failure never aborts the whole batch.
      */
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "reconcilePendingTransactions", lockAtMostFor = "10m", lockAtLeastFor = "1m")
     public void reconcilePendingTransactions() {
         Instant threshold = Instant.now().minus(pendingThresholdMinutes, ChronoUnit.MINUTES);
         List<Transaction> stuckTransactions = transactionRepository.findPendingOlderThan(threshold);
