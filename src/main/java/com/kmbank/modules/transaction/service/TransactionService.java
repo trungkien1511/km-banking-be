@@ -2,6 +2,7 @@ package com.kmbank.modules.transaction.service;
 
 import com.kmbank.common.exception.BusinessException;
 import com.kmbank.common.exception.ErrorCode;
+import com.kmbank.modules.audit.service.AuditLogService;
 import com.kmbank.modules.account.entity.BankAccount;
 import com.kmbank.modules.account.repository.BankAccountRepository;
 import com.kmbank.modules.account.service.AccountService;
@@ -37,23 +38,6 @@ import java.util.stream.Collectors;
 
 /**
  * Service for transaction read and write operations.
- *
- * <h3>Proxy ordering: Retry wraps Transaction</h3>
- * <p>{@code @Retryable} and {@code @Transactional} both work through Spring AOP proxies.
- * The order matters: the Retry proxy <em>must</em> be the outermost wrapper so it can
- * intercept the {@link ObjectOptimisticLockingFailureException} that Hibernate throws
- * during commit (which occurs as the Transaction proxy's commit hook runs, outside the
- * method body). If Transaction were outermost, the exception would escape the Retry
- * proxy entirely and retries would never fire.</p>
- *
- * <p>Spring Retry uses {@code @Order(Ordered.LOWEST_PRECEDENCE - 1)} (i.e. {@code 2147483646})
- * internally, and Spring Transaction uses {@code @Order(Ordered.LOWEST_PRECEDENCE)}
- * ({@code 2147483647}) by default — meaning Retry is already applied first (outer) and
- * Transaction is inner. This is the correct and desired ordering.</p>
- *
- * <p>The {@code @Order(1)} on this class is an <em>explicit, documented guarantee</em>
- * that ensures this bean's proxy chain is processed at the correct priority should the
- * defaults ever change in a future Spring version upgrade.</p>
  */
 @Service
 @Slf4j
@@ -66,6 +50,7 @@ public class TransactionService {
     private final LedgerService ledgerService;
     private final BankAccountRepository bankAccountRepository;
     private final PendingTransactionService pendingTransactionService;
+    private final AuditLogService auditLogService;
 
     @Value("${kmbank.system-account-number:SYSTEM-000}")
     private String systemAccountNumber;
@@ -100,8 +85,7 @@ public class TransactionService {
     public List<TransactionResponse> getCompletedTransactions(Collection<UUID> accountIds, int limit) {
         List<UUID> ids = accountIds instanceof List ? (List<UUID>) accountIds : List.copyOf(accountIds);
 
-        return transactionRepository.findCompletedByAccountIds(ids).stream()
-                .limit(limit)
+        return transactionRepository.findCompletedByAccountIds(ids, PageRequest.of(0, limit)).stream()
                 .map(txn -> {
                     TransactionDirection dir = calculateDirection(txn, accountIds);
                     UUID viewerAccountId = resolveViewerAccount(txn, accountIds);
@@ -146,27 +130,6 @@ public class TransactionService {
 
     /**
      * Executes an internal transfer between two bank accounts.
-     *
-     * <h4>Retry + Transaction proxy ordering</h4>
-     * <p>Spring Retry's advisor runs at {@code Ordered.LOWEST_PRECEDENCE - 1} and
-     * Spring Transaction runs at {@code Ordered.LOWEST_PRECEDENCE}, so Retry is
-     * always the outer proxy. The {@code @Retryable} here (not on
-     * {@link LedgerService#executeTransfer}) ensures the entire unit-of-work is
-     * retried as a fresh attempt.</p>
-     *
-     * <h4>Idempotency + retry interaction</h4>
-     * <p>On a retry caused by {@link ObjectOptimisticLockingFailureException}:</p>
-     * <ol>
-     *   <li>Attempt N saved a PENDING row with {@code idempotency_key = K}.</li>
-     *   <li>The ledger threw; that row became FAILED.</li>
-     *   <li>{@code @Retryable} restarts this method.</li>
-     *   <li>{@code checkIdempotency(K)} finds the FAILED row and returns its ID
-     *       (not null, not a cached response — a sentinel "reuse this row").</li>
-     *   <li>{@code pendingTransactionService.reusePendingTransaction(id)} resets the
-     *       row to PENDING in its own {@code REQUIRES_NEW} transaction, reusing the
-     *       same {@code id} and {@code reference_number} to keep audit trail intact.</li>
-     *   <li>The ledger runs again with the existing transaction ID.</li>
-     * </ol>
      */
     @Retryable(
             retryFor = ObjectOptimisticLockingFailureException.class,
@@ -176,73 +139,32 @@ public class TransactionService {
     @Transactional
     public TransactionResponse transfer(TransferRequest request, UUID userId) {
         log.info("Processing transfer: userId={}, sourceAccountId={}, destAccNum={}, amount={}",
-                userId, request.getSourceAccountId(), request.getDestinationAccountNumber(), request.getAmount());
+                userId, request.getSourceAccountId(), maskAccountNumber(request.getDestinationAccountNumber()), request.getAmount());
 
-        // --- Idempotency check ---
-        Transaction txn;
-        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()) {
-            IdempotencyResult result = resolveIdempotency(request.getIdempotencyKey(), request.getSourceAccountId(), userId);
-            if (result.cachedResponse != null) {
-                return result.cachedResponse;
-            }
-            if (result.existingFailedId != null) {
-                // Retry path: reuse the FAILED row rather than inserting a new one
-                txn = pendingTransactionService.reusePendingTransaction(result.existingFailedId);
-            } else {
-                // Normal path
-                if (!accountService.isAccountOwner(userId, request.getSourceAccountId())) {
-                    throw new BusinessException("Access denied: you do not own the source account",
-                            ErrorCode.ACCESS_DENIED);
+        return processTransaction(
+                userId,
+                request.getSourceAccountId(),
+                request.getAmount(),
+                TransactionType.TRANSFER,
+                request.getDescription(),
+                request.getIdempotencyKey(),
+                request.getSourceAccountId(),
+                () -> {
+                    if (!accountService.isAccountOwner(userId, request.getSourceAccountId())) {
+                        throw new BusinessException("Access denied: you do not own the source account",
+                                ErrorCode.ACCESS_DENIED);
+                    }
+                    BankAccount destAccount = bankAccountRepository
+                            .findByAccountNumber(request.getDestinationAccountNumber())
+                            .orElseThrow(() -> new BusinessException("Destination account not found",
+                                    ErrorCode.ACCOUNT_NOT_FOUND));
+                    if (request.getSourceAccountId().equals(destAccount.getId())) {
+                        throw new BusinessException("Cannot transfer to the same account",
+                                ErrorCode.TRANSFER_SAME_ACCOUNT);
+                    }
+                    return destAccount.getId();
                 }
-                BankAccount destAccount = bankAccountRepository
-                        .findByAccountNumber(request.getDestinationAccountNumber())
-                        .orElseThrow(() -> new BusinessException("Destination account not found",
-                                ErrorCode.ACCOUNT_NOT_FOUND));
-                if (request.getSourceAccountId().equals(destAccount.getId())) {
-                    throw new BusinessException("Cannot transfer to the same account",
-                            ErrorCode.TRANSFER_SAME_ACCOUNT);
-                }
-                txn = pendingTransactionService.savePendingTransaction(
-                        request.getSourceAccountId(), destAccount.getId(), userId,
-                        request.getAmount(), TransactionType.TRANSFER, request.getDescription(),
-                        request.getIdempotencyKey());
-            }
-        } else {
-            // No idempotency key — standard path
-            if (!accountService.isAccountOwner(userId, request.getSourceAccountId())) {
-                throw new BusinessException("Access denied: you do not own the source account",
-                        ErrorCode.ACCESS_DENIED);
-            }
-            BankAccount destAccount = bankAccountRepository
-                    .findByAccountNumber(request.getDestinationAccountNumber())
-                    .orElseThrow(() -> new BusinessException("Destination account not found",
-                            ErrorCode.ACCOUNT_NOT_FOUND));
-            if (request.getSourceAccountId().equals(destAccount.getId())) {
-                throw new BusinessException("Cannot transfer to the same account", ErrorCode.TRANSFER_SAME_ACCOUNT);
-            }
-            txn = pendingTransactionService.savePendingTransaction(
-                    request.getSourceAccountId(), destAccount.getId(), userId,
-                    request.getAmount(), TransactionType.TRANSFER, request.getDescription(), null);
-        }
-
-        try {
-            ledgerService.executeTransfer(
-                    txn.getSourceAccountId(), txn.getDestinationAccountId(),
-                    txn.getAmount(), txn.getId());
-
-            txn.setStatus(TransactionStatus.COMPLETED);
-            txn.setCompletedAt(Instant.now());
-            txn.setUpdatedAt(Instant.now());
-            transactionRepository.save(txn);
-
-            log.info("Transfer completed: txnId={}, ref={}", txn.getId(), txn.getReferenceNumber());
-            return TransactionResponse.fromEntity(txn, request.getSourceAccountId());
-
-        } catch (Exception ex) {
-            log.error("Transfer failed: txnId={}, reason={}", txn.getId(), ex.getMessage());
-            pendingTransactionService.markTransactionFailed(txn.getId(), ex.getMessage());
-            throw ex;
-        }
+        );
     }
 
     /**
@@ -258,51 +180,24 @@ public class TransactionService {
         log.info("Processing deposit: userId={}, accountId={}, amount={}",
                 userId, request.getAccountId(), request.getAmount());
 
-        if (!accountService.isAccountOwner(userId, request.getAccountId())) {
-            throw new BusinessException("Access denied: you do not own this account", ErrorCode.ACCESS_DENIED);
-        }
-
-        BankAccount systemAccount = bankAccountRepository.findByAccountNumber(systemAccountNumber)
-                .orElseThrow(() -> new BusinessException("System account not found", ErrorCode.INTERNAL_SERVER_ERROR));
-
+        BankAccount systemAccount = getSystemAccount();
         String desc = request.getDescription() != null ? request.getDescription() : "Deposit";
 
-        Transaction txn;
-        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()) {
-            IdempotencyResult result = resolveIdempotency(request.getIdempotencyKey(), request.getAccountId(), userId);
-            if (result.cachedResponse != null) {
-                return result.cachedResponse;
-            }
-            txn = (result.existingFailedId != null)
-                    ? pendingTransactionService.reusePendingTransaction(result.existingFailedId)
-                    : pendingTransactionService.savePendingTransaction(
-                            systemAccount.getId(), request.getAccountId(), userId,
-                            request.getAmount(), TransactionType.DEPOSIT, desc,
-                            request.getIdempotencyKey());
-        } else {
-            txn = pendingTransactionService.savePendingTransaction(
-                    systemAccount.getId(), request.getAccountId(), userId,
-                    request.getAmount(), TransactionType.DEPOSIT, desc, null);
-        }
-
-        try {
-            ledgerService.executeTransfer(
-                    txn.getSourceAccountId(), txn.getDestinationAccountId(),
-                    txn.getAmount(), txn.getId());
-
-            txn.setStatus(TransactionStatus.COMPLETED);
-            txn.setCompletedAt(Instant.now());
-            txn.setUpdatedAt(Instant.now());
-            transactionRepository.save(txn);
-
-            log.info("Deposit completed: txnId={}, ref={}", txn.getId(), txn.getReferenceNumber());
-            return TransactionResponse.fromEntity(txn, request.getAccountId());
-
-        } catch (Exception ex) {
-            log.error("Deposit failed: txnId={}, reason={}", txn.getId(), ex.getMessage());
-            pendingTransactionService.markTransactionFailed(txn.getId(), ex.getMessage());
-            throw ex;
-        }
+        return processTransaction(
+                userId,
+                systemAccount.getId(),
+                request.getAmount(),
+                TransactionType.DEPOSIT,
+                desc,
+                request.getIdempotencyKey(),
+                request.getAccountId(),
+                () -> {
+                    if (!accountService.isAccountOwner(userId, request.getAccountId())) {
+                        throw new BusinessException("Access denied: you do not own this account", ErrorCode.ACCESS_DENIED);
+                    }
+                    return request.getAccountId();
+                }
+        );
     }
 
     /**
@@ -318,31 +213,63 @@ public class TransactionService {
         log.info("Processing withdrawal: userId={}, accountId={}, amount={}",
                 userId, request.getAccountId(), request.getAmount());
 
-        if (!accountService.isAccountOwner(userId, request.getAccountId())) {
-            throw new BusinessException("Access denied: you do not own this account", ErrorCode.ACCESS_DENIED);
-        }
-
-        BankAccount systemAccount = bankAccountRepository.findByAccountNumber(systemAccountNumber)
-                .orElseThrow(() -> new BusinessException("System account not found", ErrorCode.INTERNAL_SERVER_ERROR));
-
+        BankAccount systemAccount = getSystemAccount();
         String desc = request.getDescription() != null ? request.getDescription() : "Withdrawal";
 
+        return processTransaction(
+                userId,
+                request.getAccountId(),
+                request.getAmount(),
+                TransactionType.WITHDRAWAL,
+                desc,
+                request.getIdempotencyKey(),
+                request.getAccountId(),
+                () -> {
+                    if (!accountService.isAccountOwner(userId, request.getAccountId())) {
+                        throw new BusinessException("Access denied: you do not own this account", ErrorCode.ACCESS_DENIED);
+                    }
+                    return systemAccount.getId();
+                }
+        );
+    }
+
+    /**
+     * Common template for transaction execution across transfer, deposit, and withdrawal.
+     */
+    private TransactionResponse processTransaction(
+            UUID userId,
+            UUID sourceAccountId,
+            BigDecimal amount,
+            TransactionType type,
+            String description,
+            String idempotencyKey,
+            UUID viewerAccountId,
+            java.util.function.Supplier<UUID> destinationAccountResolver) {
+
+        // Defensive guard: Ensure idempotencyKey is non-null for internal callers or future refactoring,
+        // even though controller layer @NotBlank validation intercepts invalid HTTP requests upfront.
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException("Idempotency key is required", ErrorCode.VALIDATION_ERROR);
+        }
+
         Transaction txn;
-        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank()) {
-            IdempotencyResult result = resolveIdempotency(request.getIdempotencyKey(), request.getAccountId(), userId);
-            if (result.cachedResponse != null) {
-                return result.cachedResponse;
+        IdempotencyResult result = resolveIdempotency(idempotencyKey, viewerAccountId, userId);
+        if (result.cachedResponse != null) {
+            // Record security audit log for blocked replay attempt without breaking user response
+            try {
+                auditLogService.logBlocked(userId, "DUPLICATE_REQUEST_BLOCKED", result.cachedResponse.getId(), "BLOCKED");
+            } catch (Exception auditEx) {
+                log.error("Failed to record audit log for blocked duplicate transaction: {}", auditEx.getMessage(), auditEx);
             }
-            txn = (result.existingFailedId != null)
-                    ? pendingTransactionService.reusePendingTransaction(result.existingFailedId)
-                    : pendingTransactionService.savePendingTransaction(
-                            request.getAccountId(), systemAccount.getId(), userId,
-                            request.getAmount(), TransactionType.WITHDRAWAL, desc,
-                            request.getIdempotencyKey());
+            return result.cachedResponse;
+        }
+        if (result.existingFailedId != null) {
+            txn = pendingTransactionService.reusePendingTransaction(result.existingFailedId);
         } else {
+            UUID destinationAccountId = destinationAccountResolver.get();
             txn = pendingTransactionService.savePendingTransaction(
-                    request.getAccountId(), systemAccount.getId(), userId,
-                    request.getAmount(), TransactionType.WITHDRAWAL, desc, null);
+                    sourceAccountId, destinationAccountId, userId,
+                    amount, type, description, idempotencyKey);
         }
 
         try {
@@ -355,14 +282,43 @@ public class TransactionService {
             txn.setUpdatedAt(Instant.now());
             transactionRepository.save(txn);
 
-            log.info("Withdrawal completed: txnId={}, ref={}", txn.getId(), txn.getReferenceNumber());
-            return TransactionResponse.fromEntity(txn, request.getAccountId());
+            // Audit log for successful completion (participates in current @Transactional boundary)
+            try {
+                auditLogService.logSuccess(userId, type.name(), txn.getId(), "SUCCESS");
+            } catch (Exception auditEx) {
+                log.error("Failed to record audit log for completed transaction txnId={}: {}",
+                        txn.getId(), auditEx.getMessage(), auditEx);
+            }
+
+            log.info("{} completed: txnId={}, ref={}", type, txn.getId(), txn.getReferenceNumber());
+            return TransactionResponse.fromEntity(txn, viewerAccountId);
 
         } catch (Exception ex) {
-            log.error("Withdrawal failed: txnId={}, reason={}", txn.getId(), ex.getMessage());
+            log.error("{} failed: txnId={}, reason={}", type, txn.getId(), ex.getMessage());
             pendingTransactionService.markTransactionFailed(txn.getId(), ex.getMessage());
+
+            // Audit log for failed transaction (runs in REQUIRES_NEW transaction safely)
+            try {
+                auditLogService.logFailed(userId, type.name(), txn.getId(), "FAILED");
+            } catch (Exception auditEx) {
+                log.error("Failed to record audit log for failed transaction txnId={}: {}",
+                        txn.getId(), auditEx.getMessage(), auditEx);
+            }
+
             throw ex;
         }
+    }
+
+    private BankAccount getSystemAccount() {
+        return bankAccountRepository.findByAccountNumber(systemAccountNumber)
+                .orElseThrow(() -> new BusinessException("System account not found", ErrorCode.INTERNAL_SERVER_ERROR));
+    }
+
+    private String maskAccountNumber(String accountNumber) {
+        if (accountNumber == null || accountNumber.length() <= 4) {
+            return "****";
+        }
+        return "****" + accountNumber.substring(accountNumber.length() - 4);
     }
 
     // =========================================================================

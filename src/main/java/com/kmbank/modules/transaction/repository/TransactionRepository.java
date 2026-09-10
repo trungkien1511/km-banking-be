@@ -59,7 +59,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     List<Transaction> findPendingByAccountIds(@Param("accountIds") List<UUID> accountIds);
 
     /**
-     * Find all COMPLETED transactions where the given account is either source or destination.
+     * Find COMPLETED transactions where the given account is either source or destination with pagination.
      * Useful for bulk history retrieval across multiple accounts.
      */
     @Query("""
@@ -68,7 +68,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
               AND (t.sourceAccountId IN :accountIds OR t.destinationAccountId IN :accountIds)
             ORDER BY t.createdAt DESC
             """)
-    List<Transaction> findCompletedByAccountIds(@Param("accountIds") List<UUID> accountIds);
+    List<Transaction> findCompletedByAccountIds(@Param("accountIds") List<UUID> accountIds, Pageable pageable);
 
     /**
      * Find COMPLETED transactions for a single account with pagination.

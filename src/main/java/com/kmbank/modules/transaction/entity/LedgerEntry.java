@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.kmbank.modules.transaction.enums.EntryType;
+
 @Entity
 @Table(name = "ledger_entries")
 @Getter
@@ -32,8 +34,9 @@ public class LedgerEntry {
      * DEBIT = tiền ra khỏi tài khoản.
      * CREDIT = tiền vào tài khoản.
      */
+    @Enumerated(EnumType.STRING)
     @Column(name = "entry_type", nullable = false, length = 10)
-    private String entryType;
+    private EntryType entryType;
 
     @Column(name = "amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;

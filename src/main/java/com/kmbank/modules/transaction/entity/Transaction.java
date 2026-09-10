@@ -105,4 +105,12 @@ public class Transaction {
     @Column(name = "manual_review_flagged", nullable = false)
     @Builder.Default
     private Boolean manualReviewFlagged = false;
+
+    /**
+     * Optimistic locking — prevents race condition when updating transaction status concurrently.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 }

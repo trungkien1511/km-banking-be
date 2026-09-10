@@ -2,6 +2,7 @@ package com.kmbank.modules.account.repository;
 
 import com.kmbank.modules.account.entity.BankAccount;
 import com.kmbank.modules.account.enums.AccountStatus;
+import com.kmbank.modules.customer.entity.Customer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,4 +35,14 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, UUID> 
      */
     @Query("SELECT SUM(a.availableBalance) FROM BankAccount a WHERE a.customerId = :customerId AND a.status = 'ACTIVE'")
     BigDecimal sumAvailableBalanceByCustomerId(@Param("customerId") UUID customerId);
+
+    /**
+     * Checks if a bank account is owned by the customer associated with the given user ID in a single query.
+     */
+    @Query("""
+            SELECT COUNT(a) > 0 FROM BankAccount a
+            JOIN Customer c ON c.id = a.customerId
+            WHERE c.userId = :userId AND a.id = :accountId
+            """)
+    boolean isOwnedByUser(@Param("userId") UUID userId, @Param("accountId") UUID accountId);
 }

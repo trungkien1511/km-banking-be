@@ -49,15 +49,22 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
         long currentMinute = System.currentTimeMillis() / 60_000L;
         String redisKey = "rate_limit:" + clientKey + ":" + currentMinute;
 
-        Long currentCount = stringRedisTemplate.opsForValue().increment(redisKey);
-        if (currentCount != null && currentCount == 1) {
-            stringRedisTemplate.expire(redisKey, Duration.ofSeconds(60));
-        }
+        try {
+            Long currentCount = stringRedisTemplate.opsForValue().increment(redisKey);
+            if (currentCount != null && currentCount == 1) {
+                stringRedisTemplate.expire(redisKey, Duration.ofSeconds(60));
+            }
 
-        if (currentCount != null && currentCount > maxRequests) {
-            log.warn("Rate limit exceeded for client={}: {} requests in current minute (limit={})",
-                    clientKey, currentCount, maxRequests);
-            throw new BusinessException("Rate limit exceeded. Please try again later.", ErrorCode.TOO_MANY_REQUESTS);
+            if (currentCount != null && currentCount > maxRequests) {
+                log.warn("Rate limit exceeded for client={}: {} requests in current minute (limit={})",
+                        clientKey, currentCount, maxRequests);
+                throw new BusinessException("Rate limit exceeded. Please try again later.", ErrorCode.TOO_MANY_REQUESTS);
+            }
+        } catch (BusinessException be) {
+            throw be;
+        } catch (Exception ex) {
+            log.warn("Redis unavailable for rate limiting, allowing request (fail-open): {}", ex.getMessage());
+            return true;
         }
 
         return true;

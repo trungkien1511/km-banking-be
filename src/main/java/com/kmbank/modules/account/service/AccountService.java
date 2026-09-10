@@ -89,34 +89,15 @@ public class AccountService {
     }
 
     /**
-     * Checks whether the given user owns the given bank account.
-     *
-     * <p>Ownership is determined by resolving the customer profile linked to the user
-     * and comparing its ID against the account's {@code customerId}.
+     * Checks whether the given user owns the given bank account in a single query.
      *
      * @param userId    the authenticated user's UUID
      * @param accountId the account UUID to check
      * @return {@code true} if the user owns the account, {@code false} otherwise
-     *         (also returns {@code false} if the user has no customer profile or the account does not exist)
      */
     @Transactional(readOnly = true)
     public boolean isAccountOwner(UUID userId, UUID accountId) {
         log.debug("Checking account ownership: userId={}, accountId={}", userId, accountId);
-
-        // Resolve the customer profile linked to this user
-        Customer customer = customerRepository.findByUserId(userId).orElse(null);
-        if (customer == null) {
-            log.debug("No customer profile found for userId={}", userId);
-            return false;
-        }
-
-        // Resolve the account
-        BankAccount account = bankAccountRepository.findById(accountId).orElse(null);
-        if (account == null) {
-            log.debug("Account not found: accountId={}", accountId);
-            return false;
-        }
-
-        return customer.getId().equals(account.getCustomerId());
+        return bankAccountRepository.isOwnedByUser(userId, accountId);
     }
 }

@@ -7,6 +7,7 @@ import com.kmbank.modules.account.enums.AccountStatus;
 import com.kmbank.modules.account.enums.AccountType;
 import com.kmbank.modules.account.repository.BankAccountRepository;
 import com.kmbank.modules.transaction.entity.LedgerEntry;
+import com.kmbank.modules.transaction.enums.EntryType;
 import com.kmbank.modules.transaction.repository.LedgerEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,10 @@ public class LedgerService {
         log.debug("Executing ledger transfer: sender={}, receiver={}, amount={}, txnId={}",
                 senderId, receiverId, amount, transactionId);
 
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("Transfer amount must be positive", ErrorCode.VALIDATION_ERROR);
+        }
+
         BankAccount sender = bankAccountRepository.findById(senderId)
                 .orElseThrow(() -> new BusinessException("Source account not found", ErrorCode.ACCOUNT_NOT_FOUND));
 
@@ -80,7 +85,7 @@ public class LedgerService {
         LedgerEntry debitEntry = LedgerEntry.builder()
                 .transactionId(transactionId)
                 .accountId(senderId)
-                .entryType("DEBIT")
+                .entryType(EntryType.DEBIT)
                 .amount(amount)
                 .balanceBefore(senderBalanceBefore)
                 .balanceAfter(sender.getAvailableBalance())
@@ -96,14 +101,16 @@ public class LedgerService {
         LedgerEntry creditEntry = LedgerEntry.builder()
                 .transactionId(transactionId)
                 .accountId(receiverId)
-                .entryType("CREDIT")
+                .entryType(EntryType.CREDIT)
                 .amount(amount)
                 .balanceBefore(receiverBalanceBefore)
                 .balanceAfter(receiver.getAvailableBalance())
                 .build();
         ledgerEntryRepository.save(creditEntry);
 
-        log.info("Ledger transfer completed: txnId={}, sender={} ({}->{}), receiver={} ({}->{})",
+        log.info("Ledger transfer completed: txnId={}, amount={}, senderId={}, receiverId={}",
+                transactionId, amount, senderId, receiverId);
+        log.debug("Ledger transfer balance snapshots: txnId={}, sender={} ({}->{}), receiver={} ({}->{})",
                 transactionId, senderId, senderBalanceBefore, sender.getAvailableBalance(),
                 receiverId, receiverBalanceBefore, receiver.getAvailableBalance());
     }
