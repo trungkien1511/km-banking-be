@@ -3,6 +3,7 @@ package com.kmbank.modules.account.service;
 import com.kmbank.common.exception.BusinessException;
 import com.kmbank.common.exception.ErrorCode;
 import com.kmbank.modules.account.dto.response.AccountResponse;
+import com.kmbank.modules.account.dto.response.RecipientLookupDto;
 import com.kmbank.modules.account.entity.BankAccount;
 import com.kmbank.modules.account.repository.BankAccountRepository;
 import com.kmbank.modules.customer.entity.Customer;
@@ -99,5 +100,62 @@ public class AccountService {
     public boolean isAccountOwner(UUID userId, UUID accountId) {
         log.debug("Checking account ownership: userId={}, accountId={}", userId, accountId);
         return bankAccountRepository.isOwnedByUser(userId, accountId);
+    }
+
+    /**
+     * Looks up a recipient account by account number and returns masked holder information.
+     *
+     * <p>Masking rule (Vietnamese banking convention):
+     * Given a full name like "NGUYEN VAN ANH", only the first and last tokens are shown in full;
+     * all middle tokens are replaced with "**" — result: "NGUYEN ** ANH".
+     * Single-token names are returned as-is.
+     *
+     * <p>CLOSED accounts are excluded at the repository level. FROZEN and INACTIVE accounts
+     * are returned with their status so the frontend can show a warning to the user.
+     *
+     * @param accountNumber the account number to look up (exact match)
+     * @return the masked recipient DTO
+     * @throws BusinessException with {@link ErrorCode#ACCOUNT_NOT_FOUND} if no matching account exists
+     */
+    @Transactional(readOnly = true)
+    public RecipientLookupDto lookupRecipient(String accountNumber) {
+        log.debug("Looking up recipient for accountNumber={}", accountNumber);
+
+        RecipientLookupDto raw = bankAccountRepository
+                .findRecipientByAccountNumber(accountNumber)
+                .orElseThrow(() -> {
+                    log.debug("Recipient lookup found no match for accountNumber={}", accountNumber);
+                    return new BusinessException("Account not found", ErrorCode.ACCOUNT_NOT_FOUND);
+                });
+
+        return new RecipientLookupDto(
+                raw.accountNumber(),
+                maskName(raw.accountHolderName()),
+                raw.status()
+        );
+    }
+
+    /**
+     * Applies Vietnamese banking name masking.
+     *
+     * <p>Examples:
+     * <ul>
+     *   <li>"NGUYEN VAN ANH" → "NGUYEN ** ANH"</li>
+     *   <li>"TRAN THI BICH NGOC" → "TRAN ** ** NGOC"</li>
+     *   <li>"MADONNA" → "MADONNA" (single token, no masking)</li>
+     * </ul>
+     */
+    private String maskName(String fullName) {
+        if (fullName == null || fullName.isBlank()) return fullName;
+
+        String[] parts = fullName.trim().split("\\s+");
+        if (parts.length <= 2) return fullName; // nothing to mask
+
+        StringBuilder sb = new StringBuilder(parts[0]);
+        for (int i = 1; i < parts.length - 1; i++) {
+            sb.append(" **");
+        }
+        sb.append(" ").append(parts[parts.length - 1]);
+        return sb.toString();
     }
 }
