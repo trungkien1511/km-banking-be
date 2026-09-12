@@ -6,6 +6,7 @@ import com.kmbank.modules.audit.service.AuditLogService;
 import com.kmbank.modules.account.entity.BankAccount;
 import com.kmbank.modules.account.repository.BankAccountRepository;
 import com.kmbank.modules.account.service.AccountService;
+import com.kmbank.modules.account.service.RecentRecipientService;
 import com.kmbank.modules.transaction.dto.request.DepositRequest;
 import com.kmbank.modules.transaction.dto.request.TransferRequest;
 import com.kmbank.modules.transaction.dto.request.WithdrawalRequest;
@@ -49,8 +50,9 @@ public class TransactionService {
     private final AccountService accountService;
     private final LedgerService ledgerService;
     private final BankAccountRepository bankAccountRepository;
-    private final PendingTransactionService pendingTransactionService;
-    private final AuditLogService auditLogService;
+private final PendingTransactionService pendingTransactionService;
+      private final AuditLogService auditLogService;
+      private final RecentRecipientService recentRecipientService;
 
     @Value("${kmbank.system-account-number:SYSTEM-000}")
     private String systemAccountNumber;
@@ -141,7 +143,7 @@ public class TransactionService {
         log.info("Processing transfer: userId={}, sourceAccountId={}, destAccNum={}, amount={}",
                 userId, request.getSourceAccountId(), maskAccountNumber(request.getDestinationAccountNumber()), request.getAmount());
 
-        return processTransaction(
+        TransactionResponse response = processTransaction(
                 userId,
                 request.getSourceAccountId(),
                 request.getAmount(),
@@ -165,6 +167,16 @@ public class TransactionService {
                     return destAccount.getId();
                 }
         );
+
+        // Track recipient asynchronously — must not block or fail the transfer
+        try {
+            recentRecipientService.trackTransfer(userId,
+                    request.getDestinationAccountNumber());
+        } catch (Exception trackEx) {
+            log.warn("Recent recipient tracking failed: {}", trackEx.getMessage());
+        }
+
+        return response;
     }
 
     /**

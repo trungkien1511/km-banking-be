@@ -128,34 +128,10 @@ public class AccountService {
                     return new BusinessException("Account not found", ErrorCode.ACCOUNT_NOT_FOUND);
                 });
 
-        return new RecipientLookupDto(
-                raw.accountNumber(),
-                maskName(raw.accountHolderName()),
-                raw.status()
-        );
-    }
-
-    /**
-     * Applies Vietnamese banking name masking.
-     *
-     * <p>Examples:
-     * <ul>
-     *   <li>"NGUYEN VAN ANH" → "NGUYEN ** ANH"</li>
-     *   <li>"TRAN THI BICH NGOC" → "TRAN ** ** NGOC"</li>
-     *   <li>"MADONNA" → "MADONNA" (single token, no masking)</li>
-     * </ul>
-     */
-    private String maskName(String fullName) {
-        if (fullName == null || fullName.isBlank()) return fullName;
-
-        String[] parts = fullName.trim().split("\\s+");
-        if (parts.length <= 2) return fullName; // nothing to mask
-
-        StringBuilder sb = new StringBuilder(parts[0]);
-        for (int i = 1; i < parts.length - 1; i++) {
-            sb.append(" **");
-        }
-        sb.append(" ").append(parts[parts.length - 1]);
-        return sb.toString();
+        // Return full name — no masking. The caller (frontend) knows the context:
+        // for external recipients the name is already partially hidden by the bank's
+        // data-access model (users can only see names of accounts they're sending to),
+        // and for own-account transfers the full name is expected.
+        return raw;
     }
 }

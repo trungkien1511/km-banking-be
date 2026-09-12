@@ -3,7 +3,9 @@ package com.kmbank.modules.account.controller;
 import com.kmbank.common.dto.ApiResponse;
 import com.kmbank.modules.account.dto.response.AccountResponse;
 import com.kmbank.modules.account.dto.response.RecipientLookupDto;
+import com.kmbank.modules.account.dto.response.RecentRecipientDto;
 import com.kmbank.modules.account.service.AccountService;
+import com.kmbank.modules.account.service.RecentRecipientService;
 import com.kmbank.security.CustomUserPrincipal;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -27,6 +30,7 @@ import java.util.UUID;
 public class AccountController {
 
     private final AccountService accountService;
+    private final RecentRecipientService recentRecipientService;
 
     /**
      * Returns the details of a specific bank account owned by the authenticated user.
@@ -71,5 +75,25 @@ public class AccountController {
 
         log.info("Recipient lookup resolved: accountNumber={}, status={}", accountNumber, response.status());
         return ResponseEntity.ok(ApiResponse.success(response, "Recipient resolved successfully"));
+    }
+
+    /**
+     * Returns the authenticated user's recent transfer recipients, ordered by most-recent.
+     *
+     * @param limit     max results (default 5, clamped to 1–20 by service)
+     * @param principal the authenticated user
+     */
+    @GetMapping("/recent-recipients")
+    public ResponseEntity<ApiResponse<List<RecentRecipientDto>>> getRecentRecipients(
+            @RequestParam(defaultValue = "5") int limit,
+            @AuthenticationPrincipal CustomUserPrincipal principal) {
+
+        log.info("REST request to GET /api/v1/accounts/recent-recipients for userId={}",
+                principal.getId());
+
+        List<RecentRecipientDto> response = recentRecipientService
+                .getRecentRecipients(principal.getId(), limit);
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Recent recipients retrieved successfully"));
     }
 }
