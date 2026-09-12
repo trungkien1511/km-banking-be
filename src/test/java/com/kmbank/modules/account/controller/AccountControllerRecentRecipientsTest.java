@@ -2,6 +2,7 @@ package com.kmbank.modules.account.controller;
 
 import com.kmbank.modules.account.dto.response.RecentRecipientDto;
 import com.kmbank.modules.account.service.AccountService;
+import com.kmbank.modules.account.service.BeneficiaryService;
 import com.kmbank.modules.account.service.RecentRecipientService;
 import com.kmbank.modules.user.entity.User;
 import com.kmbank.modules.user.enums.UserRole;
@@ -32,6 +33,7 @@ class AccountControllerRecentRecipientsTest {
 
     @Autowired MockMvc mockMvc;
     @MockBean AccountService accountService;
+    @MockBean BeneficiaryService beneficiaryService;
     @MockBean RecentRecipientService recentRecipientService;
     @MockBean com.kmbank.security.filter.JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockBean com.kmbank.security.handler.AuthenticationEntryPointImpl authenticationEntryPoint;

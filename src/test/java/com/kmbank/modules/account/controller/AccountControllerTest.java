@@ -4,6 +4,8 @@ import com.kmbank.common.exception.BusinessException;
 import com.kmbank.common.exception.ErrorCode;
 import com.kmbank.modules.account.dto.response.AccountResponse;
 import com.kmbank.modules.account.service.AccountService;
+import com.kmbank.modules.account.service.BeneficiaryService;
+import com.kmbank.modules.account.service.RecentRecipientService;
 import com.kmbank.modules.user.entity.User;
 import com.kmbank.modules.user.enums.UserRole;
 import com.kmbank.modules.user.enums.UserStatus;
@@ -38,6 +40,15 @@ class AccountControllerTest {
 
     @MockBean
     private AccountService accountService;
+
+    @MockBean
+    private BeneficiaryService beneficiaryService;
+
+    @MockBean
+    private RecentRecipientService recentRecipientService;
+
+    @MockBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     // SecurityConfig dependencies
     @MockBean

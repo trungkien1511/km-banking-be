@@ -1,12 +1,17 @@
 package com.kmbank.modules.account.controller;
 
 import com.kmbank.common.dto.ApiResponse;
+import com.kmbank.modules.account.dto.request.SaveBeneficiaryRequest;
 import com.kmbank.modules.account.dto.response.AccountResponse;
+import com.kmbank.modules.account.dto.response.BeneficiaryDto;
 import com.kmbank.modules.account.dto.response.RecipientLookupDto;
 import com.kmbank.modules.account.dto.response.RecentRecipientDto;
 import com.kmbank.modules.account.service.AccountService;
+import com.kmbank.modules.account.service.BeneficiaryService;
 import com.kmbank.modules.account.service.RecentRecipientService;
 import com.kmbank.security.CustomUserPrincipal;
+import com.kmbank.security.annotation.RateLimit;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +20,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,6 +38,7 @@ public class AccountController {
 
     private final AccountService accountService;
     private final RecentRecipientService recentRecipientService;
+    private final BeneficiaryService beneficiaryService;
 
     /**
      * Returns the details of a specific bank account owned by the authenticated user.
@@ -95,5 +103,34 @@ public class AccountController {
                 .getRecentRecipients(principal.getId(), limit);
 
         return ResponseEntity.ok(ApiResponse.success(response, "Recent recipients retrieved successfully"));
+    }
+
+    /**
+     * Saves (or updates) a beneficiary for the authenticated user.
+     */
+    @RateLimit(requestsPerMinute = 10)
+    @PostMapping("/beneficiaries")
+    public ResponseEntity<ApiResponse<BeneficiaryDto>> saveBeneficiary(
+            @Valid @RequestBody SaveBeneficiaryRequest request,
+            @AuthenticationPrincipal CustomUserPrincipal principal) {
+
+        log.info("REST request to POST /api/v1/accounts/beneficiaries for userId={}",
+                principal.getId());
+
+        BeneficiaryDto response = beneficiaryService.saveBeneficiary(principal.getId(), request);
+        return ResponseEntity.ok(ApiResponse.success(response, "Beneficiary saved successfully"));
+    }
+
+    /**
+     * Returns all saved beneficiaries for the authenticated user.
+     */
+    @GetMapping("/beneficiaries")
+    public ResponseEntity<ApiResponse<List<BeneficiaryDto>>> getBeneficiaries(
+            @AuthenticationPrincipal CustomUserPrincipal principal) {
+
+        log.info("REST request to GET /api/v1/accounts/beneficiaries for userId={}", principal.getId());
+
+        List<BeneficiaryDto> response = beneficiaryService.getBeneficiaries(principal.getId());
+        return ResponseEntity.ok(ApiResponse.success(response, "Beneficiaries retrieved successfully"));
     }
 }
